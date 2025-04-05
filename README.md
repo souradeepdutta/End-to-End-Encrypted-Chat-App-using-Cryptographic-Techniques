@@ -78,7 +78,7 @@ This application implements several key security features based on standard cryp
 
 2.  **Clone the Repository:**
     ```bash
-    git clone [Placeholder: Your Repository URL]
+    git clone https://github.com/souradeepdutta/End-to-End-Encrypted-Chat-App-using-Cryptographic-Techniques.git
     cd e2ee-chat
     ```
 
