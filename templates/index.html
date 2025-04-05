@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Chat with {{ peer_name }}</title>
+</head>
+<body>
+    <div class="chat-app-container">
+        <header class="chat-header">
+            <h1>{{ peer_name }}</h1>
+            <!-- Initial status - will be updated by JS -->
+            <span id="status" class="status-indicator">Connecting...</span>
+        </header>
+
+        <main class="message-area" id="message-area">
+            <ul id="message-list">
+                <!-- Initial messages loaded by Flask -->
+                {% for message in history %}
+                    {% set message_class = 'my-message' if message.startswith('You:') else 'peer-message' %}
+                    {% if '***' in message or '---' in message %}
+                        {% set message_class = 'system-message' %}
+                    {% endif %}
+                    <li class="{{ message_class }}">
+                         {% if message.startswith('You: ') %}
+                             {{ message[4:] }}
+                         {% elif ': ' in message and not message.startswith('***') and not message.startswith('---') %}
+                              {{ message.split(': ', 1)[1] }}
+                          {% else %}
+                              {{ message }}
+                         {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </main>
+
+        <footer class="message-input-area">
+            <form id="message-form">
+                <input type="text" id="message-input" name="message" placeholder="Type a message..." autocomplete="off" required>
+                <button type="submit" aria-label="Send message">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                      <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                    </svg>
+                </button>
+            </form>
+        </footer>
+    </div>
+
+    <script>
+        const messageArea = document.getElementById('message-area');
+        const messageList = document.getElementById('message-list');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+        const statusElement = document.getElementById('status');
+
+        let currentMessageCount = messageList.getElementsByTagName('li').length;
+        // Remove global isConnected flag - rely solely on server status report
+        const pollingInterval = 3000; // Poll every 3 seconds
+
+        function scrollToBottom(behavior = 'smooth') {
+            if (messageArea.scrollHeight - messageArea.scrollTop - messageArea.clientHeight < 100) {
+                messageArea.scrollTo({ top: messageArea.scrollHeight, behavior: behavior });
+            }
+        }
+
+        function addMessageToUI(messageText, isMyMessage, isSystemMessage = false) {
+            const li = document.createElement('li');
+            let messageContent = messageText.trim(); // Trim whitespace just in case
+            let cssClass = 'peer-message'; // Default
+
+            // Determine CSS class and extract actual content
+            if (isMyMessage) { // Should only apply if called locally on send
+                cssClass = 'my-message';
+                // Content is already just the message
+            } else if (isSystemMessage || messageText.startsWith('***') || messageText.startsWith('---')) {
+                cssClass = 'system-message';
+                // Keep full system message text
+            } else {
+                // Handle incoming peer message (e.g., "PeerName: Actual message")
+                cssClass = 'peer-message';
+                const separatorIndex = messageContent.indexOf(': ');
+                if (separatorIndex !== -1) {
+                    // Extract text *after* the first occurrence of ": "
+                    messageContent = messageContent.substring(separatorIndex + 2);
+                } else {
+                    // If ": " is not found, display the whole text but log a warning
+                    // This might happen if formatting changes or for system messages not caught above
+                    console.warn("Received message without expected prefix format:", messageText);
+                    // Keep messageContent as is
+                }
+            }
+
+            // Check if message content is empty *after* potential stripping
+            if (!messageContent && cssClass !== 'system-message') {
+                 console.warn("Message content is empty after processing:", messageText);
+                 // Optionally, don't add the bubble at all if content is empty
+                 // return null; // Uncomment this line to hide empty bubbles
+            }
+
+
+            li.className = cssClass + ' new-message-animation';
+            li.textContent = messageContent; // Set the potentially stripped content
+            messageList.appendChild(li);
+
+            setTimeout(() => {
+                li.classList.remove('new-message-animation');
+             }, 10);
+
+            return li; // Return the created element
+        }
+
+
+        function updateStatusIndicator(serverReportedConnected) {
+             // Updates the status text and CSS class based on server report
+             if (serverReportedConnected) {
+                 if (statusElement.textContent !== 'Connected') { // Only update DOM if changed
+                     statusElement.textContent = 'Connected';
+                     statusElement.className = 'status-indicator connected';
+                 }
+             } else {
+                 // If server says not connected, determine if initial connecting or disconnected
+                 const historyHasLoss = Array.from(messageList.getElementsByTagName('li'))
+                                             .some(li => li.textContent.includes('--- Connection Lost ---'));
+
+                 if (historyHasLoss) {
+                     if (statusElement.textContent !== 'Disconnected') {
+                         statusElement.textContent = 'Disconnected';
+                         statusElement.className = 'status-indicator disconnected';
+                     }
+                 } else {
+                      if (statusElement.textContent !== 'Connecting...') {
+                          statusElement.textContent = 'Connecting...';
+                          statusElement.className = 'status-indicator'; // Default orange
+                      }
+                 }
+             }
+        }
+
+
+        async function fetchNewMessages() {
+            try {
+                const response = await fetch(`/get_messages?since=${currentMessageCount}`);
+                if (!response.ok) {
+                    console.error("Error fetching messages:", response.statusText);
+                    // Update status based on last known state or show error state
+                    // Let's assume disconnected on fetch error for now
+                    updateStatusIndicator(false);
+                    return;
+                }
+
+                const data = await response.json();
+                const newMessages = data.messages;
+                const serverTotalCount = data.total_count;
+                const serverIsConnected = data.is_connected; // Get status from server
+
+                // --- Update Status FIRST based on server report ---
+                updateStatusIndicator(serverIsConnected);
+                // ----------------------------------------------------
+
+                if (newMessages && newMessages.length > 0) {
+                     let scrolled = false; // Track if we scrolled
+                    newMessages.forEach(message => {
+                         // Determine if message is system message based on content
+                         const isSys = message.startsWith('***') || message.startsWith('---');
+                         // Add message to UI - isMyMessage is false here as these are fetched
+                         addMessageToUI(message, false, isSys);
+                    });
+
+                    currentMessageCount = serverTotalCount; // Sync count
+                    scrollToBottom(); // Scroll smoothly
+                }
+
+            } catch (error) {
+                console.error("Error during fetch operation:", error);
+                // Update status to reflect polling error (assume disconnected)
+                updateStatusIndicator(false);
+
+            } finally {
+                // Always schedule next poll
+                setTimeout(fetchNewMessages, pollingInterval);
+            }
+        }
+
+        // --- Form Submission ---
+        messageForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const messageText = messageInput.value.trim();
+            if (messageText === '') return;
+
+            // --- FIX: Direct Local Add for Sent Message ---
+            const li = document.createElement('li');
+            li.className = 'my-message'; // Set class directly
+            li.textContent = messageText; // Set text content directly
+            li.classList.add('new-message-animation'); // Add animation class
+            messageList.appendChild(li);
+
+            // Force reflow for animation
+            setTimeout(() => {
+                 li.classList.remove('new-message-animation');
+            }, 10);
+            // --- End Fix ---
+
+
+            currentMessageCount++; // Increment local count optimistically
+            scrollToBottom('auto'); // Scroll instantly
+            messageInput.value = ''; // Clear input
+
+            // --- Send to server via Fetch ---
+            try {
+                const formData = new FormData();
+                formData.append('message', messageText);
+                const response = await fetch('/', { method: 'POST', body: formData });
+                if (!response.ok) {
+                    console.error("Error sending message:", response.statusText);
+                    // Optional: Revert local add or show error indicator on the message li
+                    li.classList.add('send-error'); // Example: Add error class
+                }
+            } catch (error) {
+                console.error("Network error sending message:", error);
+                // Optional: Revert local add or show error indicator
+                 li.classList.add('send-error'); // Example: Add error class
+            }
+        });
+
+        // --- Initial Setup ---
+        scrollToBottom('auto');
+        // Initial status is set in HTML, polling will correct it soon
+        setTimeout(fetchNewMessages, 500); // Start polling
+
+    </script>
+</body>
+</html>
