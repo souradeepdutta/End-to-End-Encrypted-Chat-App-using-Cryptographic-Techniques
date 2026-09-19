@@ -1,176 +1,100 @@
-# End-to-End-Encrypted-Chat-App-using-Cryptographic-Techniques
+# End-to-End Encrypted (E2EE) Chat Application
 
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) <!-- Add a LICENSE file (e.g., MIT) -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Security](https://img.shields.io/badge/Cryptography-ECDH%20%7C%20ECDSA%20%7C%20AES--GCM-green.svg)](#)
 
-A simple proof-of-concept End-to-End Encrypted (E2EE) chat application built with Python. This project demonstrates fundamental cryptographic principles for secure communication between two users over a network using direct socket connections.
+A peer-to-peer End-to-End Encrypted (E2EE) chat application demonstrating core cryptographic protocols for secure communication. Built with Python sockets and a modern Flask web interface, this application showcases forward secrecy, mutual peer authentication, and authenticated symmetric encryption.
 
-**Disclaimer:** This application is intended for educational purposes only and is **NOT SUITABLE FOR PRODUCTION USE** due to security limitations in key management and its simplified architecture.
+> [!NOTE]
+> **Educational Demonstration**: This project is intended for educational and research purposes to demonstrate real-world cryptographic handshakes and message security over raw TCP sockets.
 
-## Core Features
+---
 
-*   **🔒 End-to-End Encryption:** Messages are encrypted on the sender's client and decrypted only on the recipient's client using **AES-256-GCM**.
-*   **🔑 Secure Key Exchange:** Utilizes **Elliptic Curve Diffie-Hellman (ECDH)** (SECP384R1 curve) to establish a unique shared secret for each session.
-*   **✍️ Peer Authentication:** Employs **Elliptic Curve Digital Signature Algorithm (ECDSA)** (SECP384R1 curve, SHA-256) during the handshake to authenticate the peers' ephemeral ECDH public keys using long-term signing keys, preventing Man-in-the-Middle (MitM) attacks during key exchange (assuming secure initial key distribution).
-*   **🗝️ Strong Key Derivation:** Uses **HKDF (HMAC-based Key Derivation Function)** with SHA-256 to derive the symmetric AES key from the ECDH shared secret.
-*   **🚀 Forward Secrecy:** Ephemeral ECDH keys ensure that compromising long-term signing keys does not compromise past session keys or messages.
-*   **💬 Web-Based UI:** A clean, modern chat interface built with **Flask**, HTML, CSS, and JavaScript (using AJAX polling for updates without full page reloads).
-*   **💻 Direct P2P Communication:** Uses standard Python **sockets** for direct TCP connection between the two users.
-*   **👁️ Terminal Logging:** Provides verbose output in the terminal showing cryptographic operations during connection and messaging.
+## 🔒 Security Architecture & Cryptographic Flow
 
-## Demo / Screenshots
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Alice as Client A (Initiator)
+    participant Bob as Client B (Receiver)
 
-[Placeholder: Insert a screenshot showing the two chat windows side-by-side during an active, connected chat session. Include messages from both users.]
-*(Example description for screenshot: "Alice and Bob chatting securely after successful connection.")*
+    Note over Alice,Bob: 1. Identity & Key Setup (ECDSA P-384)
+    Alice->>Bob: Connection Request (TCP Socket)
+    
+    Note over Alice,Bob: 2. Authenticated Handshake (ECDH + ECDSA)
+    Alice->>Bob: Ephemeral ECDH Public Key + ECDSA Signature
+    Bob->>Bob: Verify Alice's Signature using Long-Term Identity Key
+    Bob->>Alice: Ephemeral ECDH Public Key + ECDSA Signature
+    Alice->>Alice: Verify Bob's Signature using Long-Term Identity Key
 
-[Placeholder: Insert a screenshot of the terminal output during the key exchange phase, highlighting signature verification and key derivation steps.]
-*(Example description for screenshot: "Terminal logs showing successful ECDH key exchange and ECDSA signature verification.")*
+    Note over Alice,Bob: 3. Key Derivation (HKDF-SHA256)
+    Alice->>Alice: Derive AES-256 Symmetric Session Key via HKDF
+    Bob->>Bob: Derive AES-256 Symmetric Session Key via HKDF
 
-[Placeholder: Insert a screenshot of the terminal output during message encryption/decryption.]
-*(Example description for screenshot: "Terminal logs showing AES-GCM encryption/decryption operations.")*
+    Note over Alice,Bob: 4. Secure Message Exchange (AES-256-GCM)
+    Alice->>Bob: Encrypted Payload (Ciphertext + 12-byte Nonce + 16-byte Auth Tag)
+    Bob->>Bob: Authenticate & Decrypt Payload
+    Bob->>Alice: Encrypted Response Payload
+```
 
-## Technology Stack
+---
 
-*   **Backend:** Python 3.9+
-*   **Cryptography:** `cryptography` library
-*   **Web Framework:** Flask
-*   **Communication:** Python `socket` library, `threading`, `queue`
-*   **Frontend:** HTML5, CSS3, JavaScript (Fetch API for AJAX)
-*   **Font:** Inter (via Google Fonts)
+## ✨ Core Features
 
-## Architecture Overview
+* **Authenticated Key Exchange**: Uses **ECDH** (SECP384R1 curve) for ephemeral session key negotiation, mutually authenticated via **ECDSA** (SECP384R1, SHA-256) signatures to prevent Man-in-the-Middle (MitM) attacks.
+* **Forward Secrecy**: Generating ephemeral keypairs for every session ensures that past session traffic cannot be decrypted even if long-term signing keys are ever compromised.
+* **Symmetric Message Confidentiality**: Fast, secure message encryption with **AES-256-GCM**, providing both confidentiality and cryptographic integrity verification via authentication tags.
+* **Robust Key Derivation**: Applies **HKDF** (HMAC-based Extract-and-Expand Key Derivation Function with SHA-256) to derive uniform session keys.
+* **Intuitive Web UI**: Modern, responsive interface built with Flask, HTML5, CSS3, and AJAX polling for seamless live messaging.
+* **Detailed Terminal Diagnostics**: Verbose console logging illustrating handshake states, signature validation, nonces, and ciphertexts in real time.
 
-The application runs as two separate instances (one for each user). Each instance consists of:
+---
 
-1.  **Flask Web Server (`app.py`):** Serves the HTML/CSS/JS frontend, handles user input via HTTP POST, provides new messages to the UI via an AJAX endpoint (`/get_messages`), and communicates with the Socket Handler via thread-safe queues.
-2.  **Socket Handler (`socket_handler.py`):** Manages the direct TCP socket connection (acting as client or server), performs the E2EE handshake (ECDH + ECDSA), encrypts/decrypts messages using the session key, and runs background threads for sending and receiving socket data.
-3.  **Crypto Utilities (`crypto_utils.py`):** Contains all core cryptographic functions (key generation, signing, verification, key exchange, encryption, decryption, key derivation).
-4.  **UI (`templates/index.html`, `static/style.css`):** The web interface displayed in the user's browser.
+## 📁 Repository Structure
 
-[Placeholder: Optionally, insert a simple architecture diagram image showing the interaction between Flask, Socket Handler, Queues, Crypto Utils, and the peer connection.]
+```
+├── app.py                 # Flask web server & AJAX message router
+├── crypto_utils.py        # ECDH, ECDSA, HKDF, & AES-256-GCM cryptographic routines
+├── socket_handler.py      # Direct TCP socket client/server and handshake state machine
+├── requirements.txt       # Project dependencies
+├── templates/
+│   └── index.html         # Web chat interface
+├── static/
+│   └── style.css          # Modern chat UI styling
+└── LICENSE                # MIT License
+```
 
-## Security Features & Analysis
+---
 
-This application implements several key security features based on standard cryptographic primitives:
+## 🚀 Quick Start
 
-*   **Confidentiality:** Provided by AES-GCM encryption of messages. Only the intended recipient with the correct session key can decrypt.
-*   **Integrity:** Provided by the authentication tag generated by AES-GCM for messages, and by ECDSA signatures on the exchanged ephemeral keys during the handshake. Prevents undetected tampering.
-*   **Authentication:** Peer authentication during handshake is based on the possession of the correct long-term private signing key, verified via ECDSA signatures. Message authentication is provided by AES-GCM (proving origin from the key holder).
-*   **Forward Secrecy:** Ensured by using ephemeral ECDH keys for each session.
-*   **CIA Triad:**
-    *   ✅ **Confidentiality:** High (assuming secure keys).
-    *   ✅ **Integrity:** High (for messages and handshake keys).
-    *   ❌ **Availability:** Low (requires direct P2P connection, both users online, vulnerable to network issues/crashes).
+### 1. Installation
+```bash
+git clone https://github.com/souradeepdutta/End-to-End-Encrypted-Chat-App-using-Cryptographic-Techniques.git
+cd End-to-End-Encrypted-Chat-App-using-Cryptographic-Techniques
 
-### Security Disclaimer & Limitations
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-*   🚨 **Not for Production Use:** This is a proof-of-concept.
-*   🔑 **Manual Key Exchange:** The security relies **critically** on the assumption that users exchange their initial long-term public signing keys (`{name}_public_signing_key.pem`) through a **secure out-of-band channel** before first use. If an attacker intercepts this initial exchange, the entire system's security is compromised.
-*   🔐 **Insecure Private Key Storage:** The long-term private key (`{name}_private_signing_key.pem`) is encrypted with a **hardcoded password** (`KEY_PASSWORD` in `crypto_utils.py`). This is **highly insecure**. In a real application, secure storage mechanisms (like OS keychains or user-derived keys) must be used.
-*   🌐 **Network Vulnerabilities:** Relies on direct TCP connections, which may not work reliably across NATs/firewalls without configuration. Does not protect metadata (IP addresses, timing, message length patterns).
-*   🛠️ **Minimal Error Handling:** Limited robustness against network or cryptographic errors.
+### 2. Running the Two Chat Peers
+To simulate a chat between two users on the same machine:
 
-## Setup and Installation
+```bash
+# Terminal 1: Launch Peer 1 (Host / Server)
+python app.py --port 5000 --socket-port 9000 --role server
 
-1.  **Prerequisites:**
-    *   Python 3.9 or higher
-    *   `pip` (Python package installer)
+# Terminal 2: Launch Peer 2 (Client)
+python app.py --port 5001 --socket-port 9000 --peer-ip 127.0.0.1 --role client
+```
 
-2.  **Clone the Repository:**
-    ```bash
-    git clone https://github.com/souradeepdutta/End-to-End-Encrypted-Chat-App-using-Cryptographic-Techniques.git
-    cd e2ee-chat
-    ```
+* Open `http://localhost:5000` for User 1.
+* Open `http://localhost:5001` for User 2.
+* Connect, exchange authenticated keys, and start chatting securely!
 
-3.  **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+---
 
-## Key Generation and Placement
-
-This application requires users to manage their long-term signing keys.
-
-1.  **Generate Keys:**
-    *   Run the application once for the first user (e.g., Alice). If key files don't exist, they will be generated (`alice_private_signing_key.pem`, `alice_public_signing_key.pem`), and the app will pause.
-    ```bash
-    # Example command for Alice (adjust ports/host if needed)
-    python app.py Alice Bob --listen-port 9998 --peer-host 127.0.0.1 --peer-port 9999 --flask-port 5001
-    ```
-    *   In a **separate terminal**, run the application once for the second user (e.g., Bob). Keys will be generated (`bob_...`), and the app will pause.
-    ```bash
-    # Example command for Bob (adjust ports/host, add --server if needed)
-    python app.py Bob Alice --listen-port 9999 --peer-host 127.0.0.1 --peer-port 9998 --server --flask-port 5000
-    ```
-
-2.  **Securely Exchange Public Keys:**
-    *   **Crucial Step:** Before proceeding (pressing Enter in the terminals), users MUST **securely** exchange their **public** key files.
-    *   Alice gives `alice_public_signing_key.pem` to Bob. Bob places it in his `e2ee-chat` directory, ensuring the filename is exactly `alice_public_signing_key.pem`.
-    *   Bob gives `bob_public_signing_key.pem` to Alice. Alice places it in her `e2ee-chat` directory, ensuring the filename is exactly `bob_public_signing_key.pem`.
-    *   *(For local testing from the same directory, this exchange happens automatically as files are generated in the same place).*
-
-3.  **Proceed:**
-    *   Once the public keys are correctly placed, press `Enter` in both paused terminals.
-
-[Placeholder: Insert a screenshot showing the required `.pem` key files in the project directory.]
-
-## Running the Application
-
-1.  **Start the Server Instance:**
-    *   Open a terminal, navigate to the project directory.
-    *   Run `app.py`, specifying `--server`, a listen port (`--listen-port`), the peer's details (`--peer-name`, `--peer-host`, `--peer-port`), and a Flask port (`--flask-port`).
-    ```bash
-    # Example for Bob (Server) - Replace PEER_IP_ADDRESS
-    python app.py Bob Alice --listen-port 9999 --peer-host PEER_IP_ADDRESS --peer-port 9998 --server --flask-port 5000
-    ```
-
-2.  **Start the Client Instance:**
-    *   Open a *second* terminal, navigate to the project directory.
-    *   Run `app.py`, specifying the *server's* details (`--peer-host`, `--peer-port`), a local listen port (can often be arbitrary, e.g., `--listen-port 9998`), and a *different* Flask port.
-    ```bash
-    # Example for Alice (Client) - Replace SERVER_IP_ADDRESS
-    python app.py Alice Bob --listen-port 9998 --peer-host SERVER_IP_ADDRESS --peer-port 9999 --flask-port 5001
-    ```
-    *(Note: For local testing, use `127.0.0.1` for the peer/server IP address).*
-
-3.  **Access the UI:**
-    *   Open a web browser for the server user and go to `http://127.0.0.1:[SERVER_FLASK_PORT]` (e.g., `http://127.0.0.1:5000`).
-    *   Open a web browser for the client user and go to `http://127.0.0.1:[CLIENT_FLASK_PORT]` (e.g., `http://127.0.0.1:5001`).
-    *   Wait for the status indicator to show "Connected".
-    *   Start chatting!
-
-## Key Management Details
-
-*   **Long-Term Keys (ECDSA):** Stored in password-protected `.pem` files. Used *only* to sign/verify ephemeral keys during handshake. **Protection relies on file security and the (insecure, hardcoded) password.**
-*   **Ephemeral Keys (ECDH):** Generated in memory for *each session* and discarded afterwards. Used to compute the shared secret. Never stored persistently.
-*   **Session Key (AES-GCM):** Derived from the ECDH shared secret using HKDF for each session. Held only in memory.
-
-## Limitations
-
-*   Strictly two-user communication.
-*   No message history persistence.
-*   Insecure initial public key exchange mechanism (requires manual secure transfer).
-*   Insecure long-term private key storage (hardcoded password).
-*   Potential connectivity issues due to NAT/firewalls.
-*   Requires both users to be online simultaneously.
-*   Minimalistic error handling and UI features.
-
-## Future Work
-
-*   Implement secure private key storage (OS keychain, user password).
-*   Explore methods for easier/more secure public key exchange (e.g., QR codes, signaling server).
-*   Add message persistence using a local database (e.g., SQLite).
-*   Improve NAT traversal (e.g., STUN/TURN, relay server).
-*   Consider a central server architecture for presence and offline messaging (while maintaining E2EE).
-*   Implement group chat functionality.
-*   Enhance UI (typing indicators, read receipts, timestamps, file transfer).
-*   Improve error handling and user feedback.
-*   Package the application for easier distribution (e.g., PyInstaller).
-
-## Contributing
-
-This is primarily an educational project. Contributions are generally not expected, but feel free to fork and experiment. If you find significant bugs, feel free to open an issue.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. <!-- Make sure to create a LICENSE file with the MIT license text -->
+## 📜 License
+This project is licensed under the [MIT License](LICENSE).
